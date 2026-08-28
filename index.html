@@ -176,7 +176,7 @@
 
 <script>
 /* ========================= DONNÉES ========================= */
-const APP_VERSION = 'v18';
+const APP_VERSION = 'v20';
 const STORAGE_KEY = 'vlavo_systems_v1';
 const PIN_KEY = 'vlavo_coach_pin_v1';
 const DEFAULT_PIN = '2027';
@@ -198,7 +198,8 @@ const colW=(RIGHT_X-LEFT_X)/3, col1c=LEFT_X+colW*0.5, col2c=LEFT_X+colW*1.5, col
 function depthY(frac){ return NET_Y + (BASE_Y-NET_Y)*frac; }
 
 function seedSystems(){
-  const mk = (id,dossier,titre,notes,players)=>({ id, categorie:'Défense', dossier, titre, notes, players, attackZone:'IV' });
+  const mk = (id,dossier,titre,notes,players)=>({ id, categorie:'Défense', dossier, titre, notes, players, attackZone:'IV',
+    ballBase:{x:RIGHT_X-40,y:NET_Y-30}, ballTarget:{x:RIGHT_X-40,y:NET_Y-30}, ballLabel:'IV' });
   const baseFormation = ()=>[
     {key:'b0',label:'B',color:'#0B132B',frontRow:true,base:{x:col2c,y:depthY(0.20)},target:{x:col2c,y:depthY(0.20)}},
     {key:'b1',label:'B',color:'#0B132B',frontRow:true,base:{x:col3c,y:depthY(0.20)},target:{x:col3c,y:depthY(0.20)}},
@@ -259,16 +260,41 @@ function seedSystems(){
     titre: iiTitles[sys.titre] || sys.titre,
     notes: iiNotes[sys.titre] || sys.notes,
     attackZone:'II',
-    ballPos: { x: mirrorX(RIGHT_X-40), y: NET_Y-30 },
+    ballBase: { x: mirrorX(RIGHT_X-40), y: NET_Y-30 },
+    ballTarget: { x: mirrorX(RIGHT_X-40), y: NET_Y-30 },
     ballLabel: 'II',
     players: mirrorPlayers(sys.players),
   }));
   const iiRef = {
     id:'def-ii-0', categorie:'Défense', dossier:'vs Zone II', titre:'Position de référence (base)',
     notes:"Formation de base avant que l'attaque adverse ne parte (miroir de la référence vs Zone IV).",
-    attackZone:'II', ballPos:{x:mirrorX(RIGHT_X-40),y:NET_Y-30}, ballLabel:'II',
+    attackZone:'II', ballBase:{x:mirrorX(RIGHT_X-40),y:NET_Y-30}, ballTarget:{x:mirrorX(RIGHT_X-40),y:NET_Y-30}, ballLabel:'II',
     players: mirrorPlayers(baseFormation()),
   };
+
+  // vs Pipe (attaque zone 6, centre arrière) — même base commune, cibles différentes par joueuse
+  const pipeBall = { x:(LEFT_X+RIGHT_X)/2, y:NET_Y-30 };
+  const mkPipe = (id,titre,notes,targets)=>{
+    const base = baseFormation();
+    const byKey = {}; base.forEach(p=>byKey[p.key]=p);
+    Object.entries(targets).forEach(([k,t])=>{ byKey[k].target = t; });
+    // Bloc recentré sur la passe (pipe = attaque au centre)
+    byKey.b0.target = {x:col2c+20, y:NET_Y+16};
+    byKey.b1.target = {x:col2c+70, y:NET_Y+16};
+    return { id, categorie:'Défense', dossier:'vs Zone VI', titre, notes,
+      ballBase:{...pipeBall}, ballTarget:{...pipeBall}, ballLabel:'Pipe', players: base };
+  };
+  const pipeSystems = [
+    mkPipe('def-pipe-1', 'Aide libéro → zone 1',
+      "Le libéro est sur le terrain : la pointue (Off) aide la centrale à protéger la zone 1 et la passeuse.",
+      { off:{x:col3c-30, y:depthY(0.55)}, one:{x:col3c+15, y:depthY(0.72)}, five:{x:col1c, y:depthY(0.62)}, six:{x:col2c, y:depthY(0.68)} }),
+    mkPipe('def-pipe-2', 'Aide centrale → zone 5',
+      "La centrale est en défense : R4 (1) aide à protéger la zone 5 et la centrale.",
+      { off:{x:col1c+40, y:depthY(0.30)}, one:{x:col2c-30, y:depthY(0.62)}, five:{x:col1c, y:depthY(0.60)}, six:{x:col2c+20, y:depthY(0.70)} }),
+    mkPipe('def-pipe-3', '6 en 6/1',
+      "Pas le temps d'aider le bloc : le 6 va en 6/1 pour protéger la zone 1.",
+      { off:{x:col1c+40, y:depthY(0.30)}, one:{x:col3c+15, y:depthY(0.75)}, five:{x:col1c, y:depthY(0.58)}, six:{x:col3c-50, y:depthY(0.70)} }),
+  ];
 
   return [
     mk('def-iv-0','vs Zone IV','Position de référence (base)',
@@ -277,6 +303,7 @@ function seedSystems(){
     ...ivSystems,
     iiRef,
     ...iiSystems,
+    ...pipeSystems,
   ];
 }
 
@@ -352,10 +379,16 @@ async function cloudDeleteSystem(id){
   catch(e){ console.warn('Suppression cloud échouée', e); }
 }
 function normalizeSystem(s){
-  if(!s.ballPos){
-    const presetX = { 'IV': RIGHT_X-40, 'II': LEFT_X+40, 'III':(LEFT_X+RIGHT_X)/2, 'Pipe':(LEFT_X+RIGHT_X)/2, 'Centre':(LEFT_X+RIGHT_X)/2 }[s.attackZone];
-    if(presetX!=null){ s.ballPos = {x:presetX, y:NET_Y-30}; s.ballLabel = s.attackZone; }
+  // Migration : ancien champ unique ballPos -> ballBase + ballTarget (le ballon devient déplaçable comme les joueuses)
+  if(!s.ballBase){
+    if(s.ballPos){ s.ballBase = {x:s.ballPos.x, y:s.ballPos.y}; }
+    else{
+      const presetX = { 'IV': RIGHT_X-40, 'II': LEFT_X+40, 'III':(LEFT_X+RIGHT_X)/2, 'Pipe':(LEFT_X+RIGHT_X)/2, 'Centre':(LEFT_X+RIGHT_X)/2 }[s.attackZone];
+      if(presetX!=null) s.ballBase = {x:presetX, y:NET_Y-30};
+    }
   }
+  if(s.ballBase && !s.ballTarget) s.ballTarget = {x:s.ballBase.x, y:s.ballBase.y};
+  delete s.ballPos;
   if(s.ballLabel===undefined) s.ballLabel = s.attackZone || '';
   if(s.showTrajectories===undefined) s.showTrajectories = true;
   if(!s.comments) s.comments = [];
@@ -370,6 +403,7 @@ function normalizeSystem(s){
   if((allStatic || isReferenceSystem) && (s.players||[]).length){
     s.players.forEach(p=>{ p.target = { x:p.base.x, y:p.base.y }; });
     s.showTrajectories = false;
+    if(s.ballBase) s.ballTarget = { x:s.ballBase.x, y:s.ballBase.y };
   }
   return s;
 }
@@ -521,14 +555,14 @@ render.player = function(){
     ${sys.notes? `<div class="notes-box">${esc(sys.notes)}</div>`:''}
     ${isRef ? `<div class="notes-box" style="color:var(--muted); font-style:italic;">Formation de référence statique — modifiable depuis l'espace Coach.</div>`:''}
   `;
-  buildCourtInto('playerStage', sys.players, false, sys.ballPos, sys.ballLabel, sys.showTrajectories, sys.comments);
-  positionPlayersOn('playerStage', sys.players, 'target');
+  buildCourtInto('playerStage', withBall(sys.players, sys), false, sys.ballLabel, sys.showTrajectories, sys.comments);
+  positionPlayersOn('playerStage', withBall(sys.players, sys), 'target');
   if(!isRef) syncSpeedUI('speedSlider','speedVal');
 };
 
 /* ========================= MOTEUR TERRAIN (utilisé en lecture ET édition) ========================= */
 const svgNS = "http://www.w3.org/2000/svg";
-function courtBackground(players, ballPos, ballLabel, showTraj, comments){
+function courtBackground(players, ballLabel, showTraj, comments){
   let s = '';
   s += `<rect x="${LEFT_X}" y="${NET_Y}" width="${RIGHT_X-LEFT_X}" height="${BASE_Y-NET_Y}" fill="var(--court)" />`;
   for(let i=1;i<3;i++){ const x=LEFT_X+i*colW; s += `<line x1="${x}" y1="${NET_Y}" x2="${x}" y2="${BASE_Y}" stroke="#fff" stroke-width="2" stroke-dasharray="6 6" opacity="0.7"/>`; }
@@ -542,7 +576,7 @@ function courtBackground(players, ballPos, ballLabel, showTraj, comments){
   labels.forEach(([t,i,pos])=>{ const x=LEFT_X+colW*(i+0.5); const y=pos==='top'?NET_Y+20:BASE_Y-14;
     s += `<text x="${x}" y="${y}" text-anchor="middle" font-size="12.5" fill="#fff" opacity="0.75" font-weight="bold">${t}</text>`; });
 
-  // Trajectoires en pointillés : base -> position appelée, une par joueuse (désactivable)
+  // Trajectoires en pointillés : base -> position appelée, une par joueuse (et le ballon) — désactivable
   if(showTraj!==false){
     (players||[]).forEach(p=>{
       if(!p.base || !p.target) return;
@@ -571,19 +605,23 @@ function courtBackground(players, ballPos, ballLabel, showTraj, comments){
     </g>`;
   });
 
-  // Ballon / zone d'attaque adverse (position libre, définie par glisser-déposer)
-  if(ballPos){
-    s += `<text x="${ballPos.x}" y="${ballPos.y+9}" text-anchor="middle" font-size="30">🏐</text>`;
-    if(ballLabel) s += `<text x="${ballPos.x}" y="${ballPos.y+30}" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#C0392B">${esc(ballLabel)}</text>`;
-  }
   return s;
+}
+const BALL_COLOR = '#C0392B';
+function withBall(players, sys){
+  const list = (players||[]).slice();
+  if(sys && sys.ballBase){
+    list.push({ key:'ball', isBall:true, color:BALL_COLOR, label:'',
+      base:sys.ballBase, target: sys.ballTarget || sys.ballBase });
+  }
+  return list;
 }
 const stageEls = {}; // stageId -> {key -> <g>}
 function labelFor(p, which){ return p.frontRow ? ((which==='target' && p.isOff) ? 'Off' : 'B') : p.label; }
 function colorFor(p, which){ return p.frontRow ? ((which==='target' && p.isOff) ? '#E8590C' : '#0B132B') : p.color; }
-function buildCourtInto(stageId, players, draggable, ballPos, ballLabel, showTraj, comments){
+function buildCourtInto(stageId, playersWithBall, draggable, ballLabel, showTraj, comments){
   const svg = document.getElementById(stageId);
-  svg.innerHTML = courtBackground(players, ballPos, ballLabel, showTraj, comments);
+  svg.innerHTML = courtBackground(playersWithBall, ballLabel, showTraj, comments);
   stageEls[stageId] = {};
   if(draggable && comments){
     svg.querySelectorAll('.comment-tag').forEach(el=>{
@@ -592,9 +630,27 @@ function buildCourtInto(stageId, players, draggable, ballPos, ballLabel, showTra
       attachCommentDrag(svg, el, cObj);
     });
   }
-  players.forEach(p=>{
+  playersWithBall.forEach(p=>{
     const g = document.createElementNS(svgNS,'g');
     g.setAttribute('class','mover'); g.dataset.key = p.key;
+    if(p.isBall){
+      const t = document.createElementNS(svgNS,'text');
+      t.setAttribute('y',9); t.setAttribute('text-anchor','middle'); t.setAttribute('font-size','30');
+      t.textContent = '🏐';
+      g.appendChild(t);
+      if(ballLabel){
+        const lbl = document.createElementNS(svgNS,'text');
+        lbl.setAttribute('y',30); lbl.setAttribute('text-anchor','middle'); lbl.setAttribute('font-size','11.5');
+        lbl.setAttribute('font-weight','bold'); lbl.setAttribute('fill', BALL_COLOR);
+        lbl.textContent = ballLabel;
+        g.appendChild(lbl);
+      }
+      svg.appendChild(g);
+      stageEls[stageId][p.key] = g;
+      g.style.transitionDuration = (BASE_DURATION_MS/animSpeed)+'ms';
+      if(draggable) attachDrag(svg, g, p);
+      return;
+    }
     // "Personnage" façon tête + épaules, plus sympa qu'un simple rond, avec un petit visage
     const body = document.createElementNS(svgNS,'path');
     body.setAttribute('class','role-fill');
@@ -635,7 +691,8 @@ function positionPlayersOn(stageId, players, which){
 function playAnim(inEditor){
   if(animating) return;
   const stageId = inEditor ? 'editorStage' : 'playerStage';
-  const players = inEditor ? ctx.editingSystem.players : SYS.find(s=>s.id===ctx.systemId).players;
+  const sys = inEditor ? ctx.editingSystem : SYS.find(s=>s.id===ctx.systemId);
+  const players = withBall(sys.players, sys);
   const els = stageEls[stageId];
   const btn = document.getElementById(inEditor ? 'playBtnEditor' : 'playBtnMain');
   const duration = BASE_DURATION_MS / animSpeed;
@@ -847,7 +904,7 @@ function newSystem(){
   const name = prompt("Comment veux-tu nommer ce système ?", "");
   ctx.editingSystem = {
     id: 'sys-'+Date.now().toString(36),
-    categorie:'Défense', dossier:'', titre: (name||'').trim(), notes:'', ballPos:null, ballLabel:'', showTrajectories:false, comments:[],
+    categorie:'Défense', dossier:'', titre: (name||'').trim(), notes:'', ballBase:null, ballTarget:null, ballLabel:'', showTrajectories:false, comments:[],
     players: [
       {key:'p1',label:'1',color:'#0B132B',base:{x:col2c,y:depthY(0.3)},target:{x:col2c,y:depthY(0.3)}},
       {key:'p2',label:'2',color:'#E8590C',base:{x:col2c,y:depthY(0.5)},target:{x:col2c,y:depthY(0.5)}},
@@ -872,7 +929,7 @@ render.editor = function(){
       <div class="palette-chip off" id="chipOff" data-kind="off">OFF</div>
       <div class="palette-chip ball" id="chipBall" data-kind="ball">🏐</div>
       <div class="palette-chip comment" id="chipComment" data-kind="comment">💬</div>
-      <div class="palette-hint">Glisse OFF sur une bloqueuse · glisse le ballon pour la zone d'attaque · glisse 💬 pour ajouter une étiquette (Box, Cobra, White...)</div>
+      <div class="palette-hint">Glisse OFF sur une bloqueuse · glisse le ballon (déplaçable comme une joueuse : position de départ ET d'arrivée séparées) · glisse 💬 pour une étiquette</div>
     </div>
     <div class="court-wrap"><svg class="court" viewBox="0 0 600 560" id="editorStage"></svg></div>
     <div class="controlrow">
@@ -930,8 +987,8 @@ render.editor = function(){
   document.getElementById('e_dossier').value = s.dossier;
   document.getElementById('e_notes').value = s.notes;
   document.getElementById('e_ballLabel').value = s.ballLabel || '';
-  buildCourtInto('editorStage', s.players, true, s.ballPos, s.ballLabel, s.showTrajectories, s.comments);
-  positionPlayersOn('editorStage', s.players, ctx.editTarget);
+  buildCourtInto('editorStage', withBall(s.players, s), true, s.ballLabel, s.showTrajectories, s.comments);
+  positionPlayersOn('editorStage', withBall(s.players, s), ctx.editTarget);
   setEditorTarget(ctx.editTarget);
   renderPlayerList();
   renderCommentList();
@@ -984,7 +1041,11 @@ function setupPaletteDrag(){
             rebuildEditorStage(); renderPlayerList();
           }
         } else if(kind==='ball'){
-          ctx.editingSystem.ballPos = { x:Math.round(p.x), y:Math.round(p.y) };
+          const point = { x:Math.round(p.x), y:Math.round(p.y) };
+          if(!ctx.editingSystem.ballBase) ctx.editingSystem.ballBase = {...point};
+          if(!ctx.editingSystem.ballTarget) ctx.editingSystem.ballTarget = {...point};
+          if(ctx.editTarget==='base') ctx.editingSystem.ballBase = point;
+          else ctx.editingSystem.ballTarget = point;
           rebuildEditorStage();
         } else if(kind==='comment'){
           const txt = prompt('Texte de l\'étiquette (ex: Box, Cobra, White, Black, Normal, 6/5...)', '');
@@ -1050,8 +1111,9 @@ function addPlayer(){
   rebuildEditorStage(); renderPlayerList();
 }
 function rebuildEditorStage(){
-  buildCourtInto('editorStage', ctx.editingSystem.players, true, ctx.editingSystem.ballPos, ctx.editingSystem.ballLabel, ctx.editingSystem.showTrajectories, ctx.editingSystem.comments);
-  positionPlayersOn('editorStage', ctx.editingSystem.players, ctx.editTarget);
+  const s = ctx.editingSystem;
+  buildCourtInto('editorStage', withBall(s.players, s), true, s.ballLabel, s.showTrajectories, s.comments);
+  positionPlayersOn('editorStage', withBall(s.players, s), ctx.editTarget);
 }
 function cancelEditor(){ goBack(); }
 function saveEditor(){
