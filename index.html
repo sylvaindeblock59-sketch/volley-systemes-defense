@@ -34,10 +34,10 @@
   .screen.active{ display:block; }
 
   .tabbar{ position:fixed; left:0; right:0; bottom:0; z-index:30; background:#fff; border-top:1px solid var(--line);
-    display:flex; padding:8px 6px calc(8px + env(safe-area-inset-bottom)); box-shadow:0 -4px 16px rgba(0,0,0,0.06); }
+    display:flex; padding:8px 4px calc(8px + env(safe-area-inset-bottom)); box-shadow:0 -4px 16px rgba(0,0,0,0.06); overflow-x:auto; }
   .tabbar.hide{ display:none; }
-  .tab-item{ flex:1; background:none; border:none; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px; padding:8px 2px 6px; color:var(--muted); }
-  .tab-item .lb{ font-family:Georgia,'Iowan Old Style','Palatino Linotype',serif; font-size:13.5px; font-weight:600; letter-spacing:0.3px; }
+  .tab-item{ flex:1 1 0; min-width:44px; background:none; border:none; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; padding:6px 2px 5px; color:var(--muted); }
+  .tab-item .lb{ font-family:Georgia,'Iowan Old Style','Palatino Linotype',serif; font-size:11px; font-weight:600; letter-spacing:0.1px; white-space:nowrap; }
   .tab-item .underline{ width:16px; height:2.5px; border-radius:2px; background:transparent; }
   .tab-item.active{ color:var(--navy); }
   .tab-item.active .lb{ font-weight:700; }
@@ -53,7 +53,7 @@
   .empty .big{ font-size:40px; margin-bottom:10px; }
 
   .court-wrap{ text-align:center; }
-  svg.court{ display:inline-block; width:100%; height:auto; max-height:40vh; background:var(--light); border-radius:12px; border:1px solid var(--line); touch-action:none; }
+  svg.court{ display:inline-block; width:100%; height:auto; max-height:54vh; background:var(--light); border-radius:12px; border:1px solid var(--line); touch-action:none; }
 
   .palette{ display:flex; align-items:center; gap:10px; background:#fff; border:1px solid var(--line); border-radius:12px; padding:10px 12px; margin-bottom:10px; flex-wrap:wrap; }
   .palette-chip{ flex:none; width:44px; height:44px; border-radius:50%; background:var(--navy2); color:#fff; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:800; border:2px dashed #9AA5C9; cursor:grab; touch-action:none; }
@@ -66,12 +66,16 @@
   .mover{ transition: transform 0.9s cubic-bezier(.4,0,.2,1); cursor:grab; }
   .mover.dragging{ transition:none; cursor:grabbing; }
 
-  .playbar{ display:flex; gap:8px; margin-top:10px; }
+  .playbar{ display:flex; gap:8px; margin-top:8px; }
+  .controlrow{ display:flex; align-items:center; gap:8px; margin-top:8px; }
+  .controlrow .btn-play{ flex:none; width:auto; padding:10px 16px; white-space:nowrap; }
   .playbar button{ flex:1; border:none; border-radius:10px; padding:10px; font-size:13.5px; font-weight:700; }
   .playbar button:disabled{ opacity:0.55; }
-  .speedbar{ display:flex; align-items:center; gap:10px; margin-top:8px; background:#fff; border:1px solid var(--line); border-radius:10px; padding:7px 12px; }
+  .speedbar{ display:flex; align-items:center; gap:8px; flex:1; min-width:0; background:#fff; border:1px solid var(--line); border-radius:10px; padding:7px 12px; }
   .speedbar label{ font-size:12px; font-weight:700; color:var(--muted); flex:none; }
-  .speedbar input[type=range]{ flex:1; }
+  .speedbar input[type=range]{ flex:1; min-width:0; }
+  .speedbar label{ flex:none; }
+  .speedbar .val{ flex:none; }
   .speedbar .val{ font-size:12px; font-weight:700; color:var(--ink); flex:none; width:34px; text-align:right; }
   .btn-play{ background:var(--orange); color:#fff; }
   .notes-box{ margin-top:10px; background:#fff; border:1px solid var(--line); border-radius:10px; padding:11px 13px; font-size:12.5px; color:var(--ink); line-height:1.45; }
@@ -172,16 +176,18 @@
 
 <script>
 /* ========================= DONNÉES ========================= */
-const APP_VERSION = 'v17';
+const APP_VERSION = 'v18';
 const STORAGE_KEY = 'vlavo_systems_v1';
 const PIN_KEY = 'vlavo_coach_pin_v1';
 const DEFAULT_PIN = '2027';
 
 const CATEGORIES = [
-  { key:'Défense',  icon:'🛡️', color:'#34558B' },
-  { key:'Service',  icon:'🎾', color:'#0E8388' },
-  { key:'Attaques', icon:'⚡', color:'#E8590C' },
-  { key:'Blocs',    icon:'🧱', color:'#5E4AE3' },
+  { key:'Défense',   icon:'🛡️', color:'#34558B' },
+  { key:'Réception', icon:'🙌', color:'#2E86AB' },
+  { key:'Passe',     icon:'🤲', color:'#5E4AE3' },
+  { key:'Service',   icon:'🎾', color:'#0E8388' },
+  { key:'Attaques',  icon:'⚡', color:'#E8590C' },
+  { key:'Blocs',     icon:'🧱', color:'#8E44AD' },
 ];
 const PALETTE = ['#0B132B','#E8590C','#5E4AE3','#C0392B','#0E8388','#2E9E5B','#8E44AD','#C07C0C'];
 
@@ -504,11 +510,13 @@ render.player = function(){
   el.innerHTML = `
     <div class="court-wrap"><svg class="court" viewBox="0 0 600 560" id="playerStage"></svg></div>
     ${isRef ? '' : `
-    <div class="playbar"><button class="btn-play" id="playBtnMain" onclick="playAnim(false)">▶ Jouer l'animation</button></div>
-    <div class="speedbar">
-      <label>Vitesse</label>
-      <input type="range" id="speedSlider" min="0.4" max="2.2" step="0.1" value="1" oninput="onSpeedChange(this.value)" />
-      <span class="val" id="speedVal">1.0×</span>
+    <div class="controlrow">
+      <button class="btn-play" id="playBtnMain" onclick="playAnim(false)">▶ Jouer l'animation</button>
+      <div class="speedbar">
+        <label>Vitesse</label>
+        <input type="range" id="speedSlider" min="0.4" max="2.2" step="0.1" value="1" oninput="onSpeedChange(this.value)" />
+        <span class="val" id="speedVal">1.0×</span>
+      </div>
     </div>`}
     ${sys.notes? `<div class="notes-box">${esc(sys.notes)}</div>`:''}
     ${isRef ? `<div class="notes-box" style="color:var(--muted); font-style:italic;">Formation de référence statique — modifiable depuis l'espace Coach.</div>`:''}
@@ -646,7 +654,7 @@ function playAnim(inEditor){
       clearTimeout(animLockTimer);
       animLockTimer = setTimeout(()=>{
         animating = false;
-        if(btn){ btn.disabled = false; btn.textContent = inEditor ? '▶ Tester le mouvement' : '▶ Jouer l\'animation'; }
+        if(btn){ btn.disabled = false; btn.textContent = inEditor ? '▶ Tester' : '▶ Jouer l\'animation'; }
       }, duration + 60);
     });
   });
@@ -867,14 +875,16 @@ render.editor = function(){
       <div class="palette-hint">Glisse OFF sur une bloqueuse · glisse le ballon pour la zone d'attaque · glisse 💬 pour ajouter une étiquette (Box, Cobra, White...)</div>
     </div>
     <div class="court-wrap"><svg class="court" viewBox="0 0 600 560" id="editorStage"></svg></div>
-    <div class="playbar">
-      <button class="btn-play" id="playBtnEditor" onclick="playAnim(true)">▶ Tester le mouvement</button>
-      <button class="btn-cancel" id="trajToggleBtn" onclick="toggleTrajectories()" style="flex:none; border:1px solid var(--line); border-radius:10px; padding:0 14px;">〜 Pointillés</button>
+    <div class="controlrow">
+      <button class="btn-play" id="playBtnEditor" onclick="playAnim(true)">▶ Tester</button>
+      <div class="speedbar">
+        <label>Vitesse</label>
+        <input type="range" id="speedSliderEditor" min="0.4" max="2.2" step="0.1" value="1" oninput="onSpeedChange(this.value)" />
+        <span class="val" id="speedValEditor">1.0×</span>
+      </div>
     </div>
-    <div class="speedbar">
-      <label>Vitesse</label>
-      <input type="range" id="speedSliderEditor" min="0.4" max="2.2" step="0.1" value="1" oninput="onSpeedChange(this.value)" />
-      <span class="val" id="speedValEditor">1.0×</span>
+    <div class="playbar">
+      <button class="btn-cancel" id="trajToggleBtn" onclick="toggleTrajectories()" style="border:1px solid var(--line); border-radius:10px; padding:10px;">〜 Pointillés</button>
     </div>
     <div class="editbar">
       Fais glisser une joueuse pour ajuster sa position.
