@@ -176,7 +176,7 @@
 
 <script>
 /* ========================= DONNÉES ========================= */
-const APP_VERSION = 'v20';
+const APP_VERSION = 'v21';
 const STORAGE_KEY = 'vlavo_systems_v1';
 const PIN_KEY = 'vlavo_coach_pin_v1';
 const DEFAULT_PIN = '2027';
@@ -364,6 +364,14 @@ async function loadSystems(){
     console.warn('Cloud configuré mais indisponible ('+initState+')');
     SYS = readLocalCache();
     setCloudStatus('err');
+  }
+  // Synchro des nouveaux systèmes livrés par mise à jour : on ajoute ceux qui manquent (par id),
+  // sans jamais toucher aux systèmes déjà existants (donc aucune correction déjà faite n'est perdue).
+  const existingIds = new Set(SYS.map(s=>s.id));
+  const freshOnes = seedSystems().filter(s=>!existingIds.has(s.id));
+  if(freshOnes.length){
+    SYS.push(...freshOnes);
+    if(cloudMode==='ok'){ for(const s of freshOnes) await cloudUpsertSystem(s); }
   }
   SYS.forEach(normalizeSystem);
   writeLocalCache();
